@@ -24,9 +24,12 @@ public:
 	int row, column;
 	CPoint p1;
 	int playercount;
+	int winner;
+	int lastRow;
+	int lastColumn;
+
 // Overrides
 public:
-	
 	virtual void OnDraw(CDC* pDC);  // overridden to draw this view
 	virtual BOOL PreCreateWindow(CREATESTRUCT& cs);
 protected:
@@ -43,6 +46,7 @@ public:
 #endif
 
 protected:
+	void ResetGame();
 
 // Generated message map functions
 protected:
