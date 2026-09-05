@@ -24,10 +24,13 @@ public:
 	int row, column;
 	CPoint p1;
 	int playercount;
+	int winner;
+	int lastRow;
+	int lastColumn;
+
 // Overrides
 public:
-	
-	virtual void OnDraw(CDC* pDC);  // overridden to draw this view
+	virtual void OnDraw(CDC* pDC);
 	virtual BOOL PreCreateWindow(CREATESTRUCT& cs);
 protected:
 	virtual BOOL OnPreparePrinting(CPrintInfo* pInfo);
@@ -43,16 +46,17 @@ public:
 #endif
 
 protected:
+	void ResetGame();
 
 // Generated message map functions
 protected:
 	DECLARE_MESSAGE_MAP()
 public:
 	afx_msg void OnLButtonDown(UINT nFlags, CPoint point);
+	afx_msg BOOL OnEraseBkgnd(CDC* pDC);
 };
 
-#ifndef _DEBUG  // debug version in vebancoView.cpp
+#ifndef _DEBUG
 inline CvebancoDoc* CvebancoView::GetDocument() const
    { return reinterpret_cast<CvebancoDoc*>(m_pDocument); }
 #endif
-
