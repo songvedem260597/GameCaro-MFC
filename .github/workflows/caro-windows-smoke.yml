@@ -1,0 +1,55 @@
+name: Caro Windows Smoke
+
+on:
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  run-game:
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Inspect existing executable
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:GITHUB_WORKSPACE 'Debug\vebanco.exe'
+          if (-not (Test-Path $exe)) {
+            throw "Missing executable: $exe"
+          }
+          Get-Item $exe | Format-List FullName,Length,LastWriteTime
+          Get-FileHash $exe -Algorithm SHA256 | Format-List
+
+      - name: Launch Caro smoke test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = Join-Path $env:GITHUB_WORKSPACE 'Debug\vebanco.exe'
+
+          try {
+            $process = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
+          }
+          catch {
+            Write-Host 'Failed to start the game process.'
+            Write-Host $_.Exception.ToString()
+            throw
+          }
+
+          Write-Host "Started PID $($process.Id)"
+          Start-Sleep -Seconds 8
+          $process.Refresh()
+
+          if ($process.HasExited) {
+            throw "Caro exited too early. ExitCode=$($process.ExitCode)"
+          }
+
+          Write-Host 'PASS: Caro stayed alive for 8 seconds on the GitHub-hosted Windows runner.'
+          Stop-Process -Id $process.Id -Force
