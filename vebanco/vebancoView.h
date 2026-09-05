@@ -1,58 +1,43 @@
-
-// vebancoView.h : interface of the CvebancoView class
-//
-
 #pragma once
-#include"oco.h"
-#define max 100
+#include "vebancoDoc.h"
+
 class CvebancoView : public CView
 {
-protected: // create from serialization only
-	CvebancoView();
-	DECLARE_DYNCREATE(CvebancoView)
-
-// Attributes
-public:
-	CvebancoDoc* GetDocument() const;
-
-// Operations
-public:
-	oco oco[max][max];
-	int arr[max][max];
-	int condition;
-	int size;
-	int row, column;
-	CPoint p1;
-	int playercount;
-// Overrides
-public:
-	
-	virtual void OnDraw(CDC* pDC);  // overridden to draw this view
-	virtual BOOL PreCreateWindow(CREATESTRUCT& cs);
 protected:
-	virtual BOOL OnPreparePrinting(CPrintInfo* pInfo);
-	virtual void OnBeginPrinting(CDC* pDC, CPrintInfo* pInfo);
-	virtual void OnEndPrinting(CDC* pDC, CPrintInfo* pInfo);
-
-// Implementation
+    CvebancoView();
+    DECLARE_DYNCREATE(CvebancoView)
 public:
-	virtual ~CvebancoView();
+    CvebancoDoc* GetDocument() const;
+    virtual ~CvebancoView();
+    virtual void OnDraw(CDC* dc);
+    virtual BOOL PreCreateWindow(CREATESTRUCT& cs);
+    virtual BOOL PreTranslateMessage(MSG* message);
 #ifdef _DEBUG
-	virtual void AssertValid() const;
-	virtual void Dump(CDumpContext& dc) const;
+    virtual void AssertValid() const;
+    virtual void Dump(CDumpContext& dc) const;
 #endif
-
 protected:
+    virtual void OnInitialUpdate();
+    virtual void OnUpdate(CView* sender, LPARAM hint, CObject* object);
+    virtual BOOL OnPreparePrinting(CPrintInfo* info);
+    virtual void OnBeginPrinting(CDC* dc, CPrintInfo* info);
+    virtual void OnEndPrinting(CDC* dc, CPrintInfo* info);
 
-// Generated message map functions
-protected:
-	DECLARE_MESSAGE_MAP()
-public:
-	afx_msg void OnLButtonDown(UINT nFlags, CPoint point);
+    afx_msg void OnLButtonDown(UINT flags, CPoint point);
+    afx_msg void OnSize(UINT type, int width, int height);
+    afx_msg BOOL OnEraseBkgnd(CDC* dc);
+    afx_msg void OnGameCommand(UINT command);
+    afx_msg void OnUpdateGameCommand(CCmdUI* ui);
+    afx_msg void OnUndo();
+    afx_msg void OnUpdateUndo(CCmdUI* ui);
+    DECLARE_MESSAGE_MAP()
+private:
+    caro::Move m_hint;
+    bool m_menuInstalled;
+    void PaintBoard(CDC* dc, const CRect& bounds);
 };
 
-#ifndef _DEBUG  // debug version in vebancoView.cpp
+#ifndef _DEBUG
 inline CvebancoDoc* CvebancoView::GetDocument() const
-   { return reinterpret_cast<CvebancoDoc*>(m_pDocument); }
+{ return static_cast<CvebancoDoc*>(m_pDocument); }
 #endif
-

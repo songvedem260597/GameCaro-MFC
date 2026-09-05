@@ -1,48 +1,33 @@
-
-// vebancoDoc.h : interface of the CvebancoDoc class
-//
-
-
 #pragma once
+#include "CaroGame.h"
 
-
+// Game state belongs to the document so repainting never loses moves and
+// File/New, File/Open and File/Save all operate on the actual position.
 class CvebancoDoc : public CDocument
 {
-protected: // create from serialization only
-	CvebancoDoc();
-	DECLARE_DYNCREATE(CvebancoDoc)
-
-// Attributes
+protected:
+    CvebancoDoc();
+    DECLARE_DYNCREATE(CvebancoDoc)
 public:
+    caro::Game m_game;
+    bool m_computer;
 
-// Operations
-public:
-
-// Overrides
-public:
-	virtual BOOL OnNewDocument();
-	virtual void Serialize(CArchive& ar);
-#ifdef SHARED_HANDLERS
-	virtual void InitializeSearchContent();
-	virtual void OnDrawThumbnail(CDC& dc, LPRECT lprcBounds);
-#endif // SHARED_HANDLERS
-
-// Implementation
-public:
-	virtual ~CvebancoDoc();
+    virtual BOOL OnNewDocument();
+    virtual void Serialize(CArchive& ar);
+    BOOL StartGame(int size, bool computer);
+    void PositionChanged();
+    virtual ~CvebancoDoc();
 #ifdef _DEBUG
-	virtual void AssertValid() const;
-	virtual void Dump(CDumpContext& dc) const;
+    virtual void AssertValid() const;
+    virtual void Dump(CDumpContext& dc) const;
 #endif
-
-protected:
-
-// Generated message map functions
-protected:
-	DECLARE_MESSAGE_MAP()
-
 #ifdef SHARED_HANDLERS
-	// Helper function that sets search content for a Search Handler
-	void SetSearchContent(const CString& value);
-#endif // SHARED_HANDLERS
+    virtual void InitializeSearchContent();
+    virtual void OnDrawThumbnail(CDC& dc, LPRECT bounds);
+#endif
+protected:
+    DECLARE_MESSAGE_MAP()
+#ifdef SHARED_HANDLERS
+    void SetSearchContent(const CString& value);
+#endif
 };
