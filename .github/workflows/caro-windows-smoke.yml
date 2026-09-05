@@ -1,108 +1,13 @@
-name: Caro Windows Smoke
+name: Caro Windows Crash Diagnostic
 
 on:
-  push:
-    branches:
-      - ci/caro-windows-smoke-2
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  run-game:
+  diagnostic:
     runs-on: [self-hosted, Windows, X64]
-    timeout-minutes: 20
-
     steps:
-      - name: Show runner identity
-        shell: powershell
-        run: |
-          Write-Host "RUNNER_NAME=$env:RUNNER_NAME"
-          Write-Host "RUNNER_OS=$env:RUNNER_OS"
-          Write-Host "RUNNER_ARCH=$env:RUNNER_ARCH"
-          Write-Host "COMPUTERNAME=$env:COMPUTERNAME"
-          Write-Host "USERNAME=$env:USERNAME"
-
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Build updated Caro
-        shell: powershell
-        run: |
-          $ErrorActionPreference = 'Stop'
-
-          $candidates = @(
-            'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe',
-            'C:\Program Files\Microsoft Visual Studio\2022\Community\Msbuild\Current\Bin\MSBuild.exe',
-            'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\amd64\MSBuild.exe'
-          )
-
-          $msbuild = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $msbuild) {
-            throw 'Installed Visual Studio was found previously, but MSBuild.exe is not at the expected paths.'
-          }
-
-          Write-Host "Using MSBuild: $msbuild"
-          $solution = Join-Path $env:GITHUB_WORKSPACE 'vebanco.sln'
-
-          & $msbuild $solution /m /t:Rebuild /p:Configuration=Debug /p:Platform=Win32 /p:PlatformToolset=v143 /p:WindowsTargetPlatformVersion=10.0 /nologo
-          if ($LASTEXITCODE -ne 0) {
-            throw "MSBuild failed with exit code $LASTEXITCODE"
-          }
-
-      - name: Inspect executable
-        shell: powershell
-        run: |
-          $exe = Join-Path $env:GITHUB_WORKSPACE 'Debug\vebanco.exe'
-          if (-not (Test-Path $exe)) {
-            throw "Missing executable after build: $exe"
-          }
-          Get-Item $exe | Format-List FullName,Length,LastWriteTime
-          Get-FileHash $exe -Algorithm SHA256 | Format-List
-
-      - name: Launch Caro and capture desktop
-        shell: powershell
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $artifactDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts'
-          New-Item -ItemType Directory -Path $artifactDir -Force | Out-Null
-          $exe = Join-Path $env:GITHUB_WORKSPACE 'Debug\vebanco.exe'
-
-          $process = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
-          Write-Host "Started PID $($process.Id) on runner $env:RUNNER_NAME"
-
-          Start-Sleep -Seconds 4
-          $process.Refresh()
-          if ($process.HasExited) {
-            throw "Caro exited before screenshot. ExitCode=$($process.ExitCode)"
-          }
-
-          Add-Type -AssemblyName System.Windows.Forms
-          Add-Type -AssemblyName System.Drawing
-
-          $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-          $bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
-          $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-          try {
-            $graphics.CopyFromScreen($bounds.X, $bounds.Y, 0, 0, $bounds.Size)
-            $pngPath = Join-Path $artifactDir 'caro-ui-desktop.png'
-            $bitmap.Save($pngPath, [System.Drawing.Imaging.ImageFormat]::Png)
-          }
-          finally {
-            $graphics.Dispose()
-            $bitmap.Dispose()
-          }
-
-          Write-Host "Saved screenshot: $pngPath"
-          Write-Host 'Leaving Caro open for manual testing. Close the game window when you are done.'
-          Wait-Process -Id $process.Id
-          Write-Host 'Caro was closed by the desktop user.'
-
-      - name: Upload Caro UI artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: caro-ui-${{ github.run_number }}
-          path: artifacts/*.png
-          if-no-files-found: warn
+      - run: echo "Crash diagnostic workflow is being prepared."
