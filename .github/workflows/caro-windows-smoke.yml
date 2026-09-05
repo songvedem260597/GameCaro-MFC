@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Show runner identity
-        shell: pwsh
+        shell: powershell
         run: |
           Write-Host "RUNNER_NAME=$env:RUNNER_NAME"
           Write-Host "RUNNER_OS=$env:RUNNER_OS"
@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Inspect existing executable
-        shell: pwsh
+        shell: powershell
         run: |
           $exe = Join-Path $env:GITHUB_WORKSPACE 'Debug\vebanco.exe'
           if (-not (Test-Path $exe)) {
@@ -37,7 +37,7 @@ jobs:
           Get-FileHash $exe -Algorithm SHA256 | Format-List
 
       - name: Launch Caro smoke test on local PC
-        shell: pwsh
+        shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           $exe = Join-Path $env:GITHUB_WORKSPACE 'Debug\vebanco.exe'
