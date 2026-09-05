@@ -1,6 +1,9 @@
 name: Caro Windows Crash Diagnostic
 
 on:
+  push:
+    branches:
+      - ci/caro-windows-smoke-2
   workflow_dispatch:
 
 permissions:
@@ -9,5 +12,99 @@ permissions:
 jobs:
   diagnostic:
     runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 20
+
     steps:
-      - run: echo "Crash diagnostic workflow is being prepared."
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build diagnostic Caro
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $msbuild = 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe'
+          if (-not (Test-Path $msbuild)) { throw "MSBuild missing: $msbuild" }
+          & $msbuild (Join-Path $env:GITHUB_WORKSPACE 'vebanco.sln') /m /t:Rebuild /p:Configuration=Debug /p:Platform=Win32 /p:PlatformToolset=v143 /p:WindowsTargetPlatformVersion=10.0 /nologo
+          if ($LASTEXITCODE -ne 0) { throw "MSBuild failed with exit code $LASTEXITCODE" }
+
+      - name: Run game and wait for reproduction
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $artifactDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts'
+          New-Item -ItemType Directory -Path $artifactDir -Force | Out-Null
+          Get-ChildItem $artifactDir -Force -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+
+          $env:CARO_DIAG_DIR = $artifactDir
+          $start = Get-Date
+          $start.ToString('o') | Set-Content (Join-Path $artifactDir 'diagnostic-start.txt')
+
+          $exe = Join-Path $env:GITHUB_WORKSPACE 'Debug\vebanco.exe'
+          if (-not (Test-Path $exe)) { throw "Missing executable: $exe" }
+
+          $p = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
+          Write-Host "Caro PID=$($p.Id). Reproduce the crash now by playing until it exits."
+
+          Start-Sleep -Seconds 3
+          if (-not $p.HasExited) {
+            Add-Type -AssemblyName System.Windows.Forms
+            Add-Type -AssemblyName System.Drawing
+            $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+            $gfx = [System.Drawing.Graphics]::FromImage($bmp)
+            try {
+              $gfx.CopyFromScreen($bounds.X, $bounds.Y, 0, 0, $bounds.Size)
+              $bmp.Save((Join-Path $artifactDir 'caro-before-repro.png'), [System.Drawing.Imaging.ImageFormat]::Png)
+            }
+            finally {
+              $gfx.Dispose(); $bmp.Dispose()
+            }
+          }
+
+          Wait-Process -Id $p.Id
+          $p.Refresh()
+          $exitCode = $p.ExitCode
+          Write-Host "Caro exited with code $exitCode"
+          $exitCode | Set-Content (Join-Path $artifactDir 'exit-code.txt')
+          (Get-Date).ToString('o') | Set-Content (Join-Path $artifactDir 'diagnostic-end.txt')
+
+      - name: Collect Windows crash events
+        if: always()
+        shell: powershell
+        run: |
+          $artifactDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts'
+          New-Item -ItemType Directory -Path $artifactDir -Force | Out-Null
+          $startPath = Join-Path $artifactDir 'diagnostic-start.txt'
+          if (Test-Path $startPath) {
+            $start = [DateTime]::Parse((Get-Content $startPath -Raw).Trim())
+          } else {
+            $start = (Get-Date).AddMinutes(-15)
+          }
+
+          $events = Get-WinEvent -FilterHashtable @{LogName='Application'; StartTime=$start} -ErrorAction SilentlyContinue |
+            Where-Object {
+              $_.ProviderName -in @('Application Error','Windows Error Reporting','.NET Runtime') -or
+              $_.Message -match 'vebanco|caro'
+            } |
+            Select-Object TimeCreated, Id, LevelDisplayName, ProviderName, Message
+
+          $events | Format-List | Out-File (Join-Path $artifactDir 'windows-application-events.txt') -Width 300 -Encoding utf8
+          Get-ChildItem $artifactDir -Force | Format-Table Name,Length,LastWriteTime
+
+      - name: Upload crash diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: caro-crash-diagnostic-${{ github.run_number }}
+          path: artifacts/*
+          if-no-files-found: error
+
+      - name: Mark unexpected exit
+        if: always()
+        shell: powershell
+        run: |
+          $path = Join-Path $env:GITHUB_WORKSPACE 'artifacts\exit-code.txt'
+          if (Test-Path $path) {
+            $code = [int](Get-Content $path -Raw).Trim()
+            if ($code -ne 0) { throw "Caro crashed or exited abnormally with code $code. Diagnostics were uploaded." }
+          }
