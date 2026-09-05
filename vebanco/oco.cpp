@@ -31,87 +31,54 @@ int oco::boxcheck(CPoint p1)
 	else
 		return 0;
 }
+
 int oco::checkToWin(int arr[][max], int I, int J)
 {
-	int row = 30, column = 30;
-	int result = 0;
-	int diagonalsum1 = 0, diagonalsum2 = 0, vertical = 0, horizontal = 0;
-	int i = 0, j = 0, value = 0;
-	i = I;
-	j = J;
-	value = arr[I][J];
+	const int row = 30;
+	const int column = 30;
+	const int value = arr[I][J];
+	if (value == 0)
+		return 0;
 
-	while (i >=0 && j >= 0 && arr[i][j]==value)
+	const int directions[4][2] =
 	{
-		diagonalsum1++;
-		i--;
-		j--;
-	}
-	i = I + 1;
-	j = J + 1;
-	while (i < row && j < column && value == arr[i][j])
-	{
-		diagonalsum1++;
-		i++;
-		j++;
-	}
-	//ok
-	i = I;
-	j = J;
-	while (i >= 0 && j < column &&  value == arr[i][j])
-	{
-		diagonalsum2++;
-		i--;
-		j++;
-	}
-	i = I + 1;
-	j = J - 1;
-	while (j >= 0 && i < row && value == arr[i][j])
-	{
-		diagonalsum2++;
-		i++;
-		j--;
-	}
-	//ok
+		{ 1, 0 },
+		{ 0, 1 },
+		{ 1, 1 },
+		{ 1, -1 }
+	};
 
-	
-	i = I;
-	j = J;
-	while (i >= 0 && value == arr[i][j])
+	for (int d = 0; d < 4; ++d)
 	{
-		vertical++;
-		i--;
-	}
-	i = I + 1;
-	j = J;
-	while (i < row && arr[i][j] == value)
-	{
-		vertical++;
-		i++;
+		const int di = directions[d][0];
+		const int dj = directions[d][1];
+		int count = 1;
+
+		int i = I + di;
+		int j = J + dj;
+		while (i >= 0 && i < row && j >= 0 && j < column && arr[i][j] == value)
+		{
+			++count;
+			i += di;
+			j += dj;
+		}
+
+		i = I - di;
+		j = J - dj;
+		while (i >= 0 && i < row && j >= 0 && j < column && arr[i][j] == value)
+		{
+			++count;
+			i -= di;
+			j -= dj;
+		}
+
+		if (count >= 5)
+			return 1;
 	}
 
-	//ok
-	
-	i = I;
-	j = J;
-	while (j >= 0 && arr[i][j] == value)
-	{
-		horizontal++;
-		j--;
-	}
-	i = I;
-	j = J+1;
-	while (j < column && arr[i][j] == value)
-	{
-		horizontal++;
-		j++;
-	}
-	if (diagonalsum1 == 4 || diagonalsum2 == 4 || vertical == 4 || horizontal == 4)
-	{
-		result = 1;
-	}
-	return result;
+	return 0;
 }
+
 int oco::getA()
 {
 	return(x2 - x1) / 2;
