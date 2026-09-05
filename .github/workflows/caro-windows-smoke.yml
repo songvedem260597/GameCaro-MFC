@@ -95,11 +95,9 @@ jobs:
           }
 
           Write-Host "Saved screenshot: $pngPath"
-          Start-Sleep -Seconds 4
-          $process.Refresh()
-          if (-not $process.HasExited) {
-            Stop-Process -Id $process.Id -Force
-          }
+          Write-Host 'Leaving Caro open for manual testing. Close the game window when you are done.'
+          Wait-Process -Id $process.Id
+          Write-Host 'Caro was closed by the desktop user.'
 
       - name: Upload Caro UI artifact
         if: always()
