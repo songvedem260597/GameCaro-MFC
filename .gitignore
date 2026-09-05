@@ -1,0 +1,24 @@
+# New build/IDE output only; historical tracked binaries are not removed.
+.vs/
+[Bb]uild*/
+[Dd]ebug/
+[Rr]elease/
+Win32/
+x64/
+ipch/
+*.obj
+*.pch
+*.pdb
+*.ilk
+*.tlog
+*.lastbuildstate
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.VC.opendb
+*.suo
+*.user
+*.aps
+*.log
+*.caro
+*~

@@ -1,21 +1,23 @@
 #pragma once
-#define max 100
+
+// Legacy drawing helper. The active UI uses CaroGame.h; keep this API safe for
+// older callers without defining a global macro named "max".
+enum { CaroLegacyCapacity = 100 };
 class oco
 {
 private:
-	int x1,y1,x2,y2;
+    int x1, y1, x2, y2;
 public:
-	void chucnangmoi();
-	CPoint point1,point2;
-	void setup(int mx1, int my1, int mx2, int my2);
-	void draw(CClientDC *pDC);
-	void drawX(CClientDC *pDC);
-	void drawO(CClientDC *pDC);
-	int boxcheck(CPoint p1);
-	int checkToWin(int arr[][max], int i, int j);
-	int getA();
-	int getC();
-	oco(void);
-	~oco(void);
+    void chucnangmoi();
+    CPoint point1, point2;
+    void setup(int left, int top, int right, int bottom);
+    void draw(CDC* dc);
+    void drawX(CDC* dc);
+    void drawO(CDC* dc);
+    int boxcheck(CPoint point);
+    int checkToWin(const int board[][CaroLegacyCapacity], int row, int col);
+    int getA();
+    int getC();
+    oco();
+    ~oco();
 };
-
