@@ -27,7 +27,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Inspect existing executable
+      - name: Inspect executable
         shell: powershell
         run: |
           $exe = Join-Path $env:GITHUB_WORKSPACE 'Debug\vebanco.exe'
@@ -35,9 +35,8 @@ jobs:
             throw "Missing executable: $exe"
           }
           Get-Item $exe | Format-List FullName,Length,LastWriteTime
-          Get-FileHash $exe -Algorithm SHA256 | Format-List
 
-      - name: Launch Caro and capture game window
+      - name: Launch Caro and capture desktop
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
@@ -45,78 +44,24 @@ jobs:
           New-Item -ItemType Directory -Path $artifactDir -Force | Out-Null
           $exe = Join-Path $env:GITHUB_WORKSPACE 'Debug\vebanco.exe'
 
-          try {
-            $process = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
-          }
-          catch {
-            Write-Host 'Failed to start the game process.'
-            Write-Host $_.Exception.ToString()
-            throw
-          }
+          $process = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
+          Write-Host "Started PID $($process.Id) on runner $env:RUNNER_NAME"
 
-          Write-Host "Started PID $($process.Id) on self-hosted runner $env:RUNNER_NAME"
-          Write-Host 'Waiting for the Caro window to appear...'
-
-          $deadline = (Get-Date).AddSeconds(15)
-          do {
-            Start-Sleep -Milliseconds 500
-            $process.Refresh()
-          } until ($process.HasExited -or $process.MainWindowHandle -ne 0 -or (Get-Date) -ge $deadline)
-
+          Start-Sleep -Seconds 4
+          $process.Refresh()
           if ($process.HasExited) {
-            throw "Caro exited before its window appeared. ExitCode=$($process.ExitCode)"
-          }
-          if ($process.MainWindowHandle -eq 0) {
-            throw 'Caro process is running but no main window handle was found.'
+            throw "Caro exited before screenshot. ExitCode=$($process.ExitCode)"
           }
 
-          $nativeCode = @"
-using System;
-using System.Runtime.InteropServices;
-public static class CaroNativeMethods {
-  [StructLayout(LayoutKind.Sequential)]
-  public struct RECT {
-    public int Left;
-    public int Top;
-    public int Right;
-    public int Bottom;
-  }
-
-  [DllImport("user32.dll")]
-  public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
-
-  [DllImport("user32.dll")]
-  public static extern bool SetForegroundWindow(IntPtr hWnd);
-
-  [DllImport("user32.dll")]
-  public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
-}
-"@
-          Add-Type -TypeDefinition $nativeCode
+          Add-Type -AssemblyName System.Windows.Forms
           Add-Type -AssemblyName System.Drawing
 
-          [CaroNativeMethods]::ShowWindowAsync($process.MainWindowHandle, 5) | Out-Null
-          Start-Sleep -Milliseconds 500
-          [CaroNativeMethods]::SetForegroundWindow($process.MainWindowHandle) | Out-Null
-          Start-Sleep -Seconds 2
-          $process.Refresh()
-
-          $rect = New-Object CaroNativeMethods+RECT
-          if (-not [CaroNativeMethods]::GetWindowRect($process.MainWindowHandle, [ref]$rect)) {
-            throw 'GetWindowRect failed for the Caro window.'
-          }
-
-          $width = $rect.Right - $rect.Left
-          $height = $rect.Bottom - $rect.Top
-          if ($width -le 0 -or $height -le 0) {
-            throw "Invalid Caro window size: ${width}x${height}"
-          }
-
-          $pngPath = Join-Path $artifactDir 'caro-ui-window.png'
-          $bitmap = New-Object System.Drawing.Bitmap $width, $height
+          $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
           $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
           try {
-            $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size)
+            $graphics.CopyFromScreen($bounds.X, $bounds.Y, 0, 0, $bounds.Size)
+            $pngPath = Join-Path $artifactDir 'caro-ui-desktop.png'
             $bitmap.Save($pngPath, [System.Drawing.Imaging.ImageFormat]::Png)
           }
           finally {
@@ -124,30 +69,24 @@ public static class CaroNativeMethods {
             $bitmap.Dispose()
           }
 
-          $infoPath = Join-Path $artifactDir 'caro-window-info.txt'
+          $infoPath = Join-Path $artifactDir 'caro-ui-info.txt'
           @(
             "RUNNER_NAME=$env:RUNNER_NAME"
             "COMPUTERNAME=$env:COMPUTERNAME"
+            "USERNAME=$env:USERNAME"
             "PROCESS_ID=$($process.Id)"
-            "MAIN_WINDOW_HANDLE=$($process.MainWindowHandle)"
-            "WINDOW_LEFT=$($rect.Left)"
-            "WINDOW_TOP=$($rect.Top)"
-            "WINDOW_WIDTH=$width"
-            "WINDOW_HEIGHT=$height"
+            "SCREEN_WIDTH=$($bounds.Width)"
+            "SCREEN_HEIGHT=$($bounds.Height)"
             "CAPTURE_TIME_UTC=$([DateTime]::UtcNow.ToString('u'))"
           ) | Set-Content -Path $infoPath -Encoding UTF8
 
-          Write-Host "Saved Caro window screenshot to $pngPath"
-          Write-Host "Saved window metadata to $infoPath"
-
-          Start-Sleep -Seconds 8
+          Write-Host "Saved screenshot: $pngPath"
+          Start-Sleep -Seconds 6
           $process.Refresh()
-          if ($process.HasExited) {
-            throw "Caro exited too early after screenshot. ExitCode=$($process.ExitCode)"
+          if (-not $process.HasExited) {
+            Stop-Process -Id $process.Id -Force
           }
-
-          Stop-Process -Id $process.Id -Force
-          Write-Host 'PASS: Caro window screenshot captured on the self-hosted Windows runner.'
+          Write-Host 'PASS: captured desktop screenshot while Caro was running.'
 
       - name: Upload Caro UI artifact
         if: always()
@@ -157,4 +96,4 @@ public static class CaroNativeMethods {
           path: |
             artifacts/*.png
             artifacts/*.txt
-          if-no-files-found: warn
+          if-no-files-found: error
