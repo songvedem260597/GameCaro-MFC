@@ -1,6 +1,9 @@
 name: Caro Windows Smoke
 
 on:
+  push:
+    branches:
+      - ci/caro-windows-smoke-2
   workflow_dispatch:
 
 permissions:
