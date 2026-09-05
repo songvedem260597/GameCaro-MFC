@@ -27,110 +27,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Inspect installed Windows C++ build tools
-        shell: powershell
-        run: |
-          $ErrorActionPreference = 'Continue'
-
-          Write-Host '=== PATH tools ==='
-          foreach ($tool in @('msbuild.exe','cl.exe','devenv.exe','cmake.exe','ninja.exe')) {
-            $cmd = Get-Command $tool -ErrorAction SilentlyContinue
-            if ($cmd) {
-              Write-Host "$tool => $($cmd.Source)"
-            } else {
-              Write-Host "$tool => NOT FOUND IN PATH"
-            }
-          }
-
-          Write-Host '=== Visual Studio Installer / vswhere ==='
-          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-          if (Test-Path $vswhere) {
-            Write-Host "vswhere => $vswhere"
-            Write-Host '-- all installations --'
-            & $vswhere -all -products * -format json
-            Write-Host '-- installations with MSBuild --'
-            & $vswhere -all -products * -requires Microsoft.Component.MSBuild -property installationPath
-            Write-Host '-- installations with VC x86/x64 tools --'
-            & $vswhere -all -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-            Write-Host '-- installations with MFC --'
-            & $vswhere -all -products * -requires Microsoft.VisualStudio.Component.VC.MFC -property installationPath
-          } else {
-            Write-Host 'vswhere => NOT FOUND'
-          }
-
-          Write-Host '=== Common Visual Studio folders ==='
-          $roots = @(
-            (Join-Path $env:ProgramFiles 'Microsoft Visual Studio'),
-            (Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio')
-          )
-          foreach ($root in $roots) {
-            Write-Host "ROOT: $root"
-            if (Test-Path $root) {
-              Get-ChildItem $root -Directory -ErrorAction SilentlyContinue | Select-Object FullName
-              Write-Host 'MSBuild candidates:'
-              Get-ChildItem $root -Filter MSBuild.exe -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 10 FullName
-              Write-Host 'cl.exe candidates:'
-              Get-ChildItem $root -Filter cl.exe -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 10 FullName
-            } else {
-              Write-Host 'Folder does not exist.'
-            }
-          }
-
-          Write-Host '=== Windows SDK ==='
-          $kits10 = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10'
-          $kits81 = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\8.1'
-          Write-Host "Windows Kits 10 exists: $(Test-Path $kits10)"
-          Write-Host "Windows Kits 8.1 exists: $(Test-Path $kits81)"
-          if (Test-Path (Join-Path $kits10 'bin')) {
-            Get-ChildItem (Join-Path $kits10 'bin') -Directory -ErrorAction SilentlyContinue | Select-Object -Last 10 Name,FullName
-          }
-
-          Write-Host '=== Diagnostic complete ==='
-
       - name: Build updated Caro
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-          $msbuild = $null
 
-          if (Test-Path $vswhere) {
-            $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
-          }
+          $candidates = @(
+            'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe',
+            'C:\Program Files\Microsoft Visual Studio\2022\Community\Msbuild\Current\Bin\MSBuild.exe',
+            'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\amd64\MSBuild.exe'
+          )
 
+          $msbuild = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
           if (-not $msbuild) {
-            $cmd = Get-Command msbuild.exe -ErrorAction SilentlyContinue
-            if ($cmd) { $msbuild = $cmd.Source }
-          }
-
-          if (-not $msbuild) {
-            throw 'MSBuild was not found on this self-hosted runner.'
+            throw 'Installed Visual Studio was found previously, but MSBuild.exe is not at the expected paths.'
           }
 
           Write-Host "Using MSBuild: $msbuild"
           $solution = Join-Path $env:GITHUB_WORKSPACE 'vebanco.sln'
-          $attempts = @(
-            @{ Name = 'project defaults'; Args = @() },
-            @{ Name = 'v143 + Windows 10 SDK'; Args = @('/p:PlatformToolset=v143','/p:WindowsTargetPlatformVersion=10.0') },
-            @{ Name = 'v142 + Windows 10 SDK'; Args = @('/p:PlatformToolset=v142','/p:WindowsTargetPlatformVersion=10.0') },
-            @{ Name = 'v141 + Windows 10 SDK'; Args = @('/p:PlatformToolset=v141','/p:WindowsTargetPlatformVersion=10.0') },
-            @{ Name = 'v140 + Windows 10 SDK'; Args = @('/p:PlatformToolset=v140','/p:WindowsTargetPlatformVersion=10.0') }
-          )
 
-          $built = $false
-          foreach ($attempt in $attempts) {
-            Write-Host "=== Build attempt: $($attempt.Name) ==="
-            $args = @($solution, '/m', '/t:Rebuild', '/p:Configuration=Debug', '/p:Platform=Win32', '/nologo') + $attempt.Args
-            & $msbuild @args
-            if ($LASTEXITCODE -eq 0) {
-              $built = $true
-              Write-Host "Build succeeded with: $($attempt.Name)"
-              break
-            }
-          }
-
-          if (-not $built) {
-            throw 'All MSBuild attempts failed.'
+          & $msbuild $solution /m /t:Rebuild /p:Configuration=Debug /p:Platform=Win32 /p:PlatformToolset=v143 /p:WindowsTargetPlatformVersion=10.0 /nologo
+          if ($LASTEXITCODE -ne 0) {
+            throw "MSBuild failed with exit code $LASTEXITCODE"
           }
 
       - name: Inspect executable
