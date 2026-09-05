@@ -103,6 +103,7 @@ BEGIN_MESSAGE_MAP(CvebancoView, CView)
 	ON_COMMAND(ID_FILE_PRINT_DIRECT, &CView::OnFilePrint)
 	ON_COMMAND(ID_FILE_PRINT_PREVIEW, &CView::OnFilePrintPreview)
 	ON_WM_LBUTTONDOWN()
+	ON_WM_ERASEBKGND()
 END_MESSAGE_MAP()
 
 CvebancoView::CvebancoView()
@@ -136,6 +137,12 @@ BOOL CvebancoView::PreCreateWindow(CREATESTRUCT& cs)
 	return CView::PreCreateWindow(cs);
 }
 
+BOOL CvebancoView::OnEraseBkgnd(CDC* pDC)
+{
+	UNREFERENCED_PARAMETER(pDC);
+	return TRUE;
+}
+
 void CvebancoView::OnDraw(CDC* pDC)
 {
 	CvebancoDoc* pDoc = GetDocument();
@@ -144,6 +151,20 @@ void CvebancoView::OnDraw(CDC* pDC)
 
 	CRect client;
 	GetClientRect(&client);
+
+	CDC* outputDC = pDC;
+	CDC bufferDC;
+	CBitmap bufferBitmap;
+	CBitmap* oldBitmap = NULL;
+	const bool useBuffer = !pDC->IsPrinting() && client.Width() > 0 && client.Height() > 0;
+	if (useBuffer)
+	{
+		bufferDC.CreateCompatibleDC(pDC);
+		bufferBitmap.CreateCompatibleBitmap(pDC, client.Width(), client.Height());
+		oldBitmap = bufferDC.SelectObject(&bufferBitmap);
+		pDC = &bufferDC;
+	}
+
 	pDC->FillSolidRect(client, kBackground);
 	pDC->SetBkMode(TRANSPARENT);
 
@@ -260,6 +281,13 @@ void CvebancoView::OnDraw(CDC* pDC)
 	pDC->SelectObject(&labelFont); pDC->SetTextColor(kMuted);
 	CString moves; moves.Format(_T("Moves played: %d"), playercount); pDC->TextOutW(x, sideRect.bottom - 44, moves);
 	pDC->SelectObject(oldFont);
+
+	if (useBuffer)
+	{
+		outputDC->BitBlt(client.left, client.top, client.Width(), client.Height(),
+			&bufferDC, client.left, client.top, SRCCOPY);
+		bufferDC.SelectObject(oldBitmap);
+	}
 }
 
 BOOL CvebancoView::OnPreparePrinting(CPrintInfo* pInfo) { return DoPreparePrinting(pInfo); }
