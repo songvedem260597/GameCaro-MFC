@@ -29,6 +29,16 @@ namespace
 	const COLORREF kHighlight = RGB(219, 234, 254);
 	const COLORREF kShadow = RGB(220, 226, 234);
 
+	int IntMin(int a, int b)
+	{
+		return (a < b) ? a : b;
+	}
+
+	int IntMax(int a, int b)
+	{
+		return (a > b) ? a : b;
+	}
+
 	void GetLayout(CWnd* view, CRect& boardRect, CRect& sideRect, int& cellSize)
 	{
 		CRect client;
@@ -37,14 +47,14 @@ namespace
 		const int margin = 28;
 		const int gap = 28;
 		const int sideWidth = 320;
-		const int maxBoard = min(client.Height() - margin * 2, client.Width() - sideWidth - gap - margin * 2);
-		cellSize = max(18, maxBoard / 30);
+		const int maxBoard = IntMin(client.Height() - margin * 2, client.Width() - sideWidth - gap - margin * 2);
+		cellSize = IntMax(18, maxBoard / 30);
 		const int boardPixels = cellSize * 30;
 
-		int top = max(margin, (client.Height() - boardPixels) / 2);
+		int top = IntMax(margin, (client.Height() - boardPixels) / 2);
 		int left = margin;
 		boardRect = CRect(left, top, left + boardPixels, top + boardPixels);
-		sideRect = CRect(boardRect.right + gap, top, min(client.right - margin, boardRect.right + gap + sideWidth), top + boardPixels);
+		sideRect = CRect(boardRect.right + gap, top, IntMin(client.right - margin, boardRect.right + gap + sideWidth), top + boardPixels);
 	}
 
 	void FillRoundRect(CDC* pDC, const CRect& rect, COLORREF color, int radius)
@@ -129,7 +139,6 @@ void CvebancoView::OnDraw(CDC* pDC)
 	FillRoundRect(pDC, panelShadow, kShadow, 18);
 	FillRoundRect(pDC, sideRect, kPanel, 18);
 
-	// Board grid and cell hit boxes
 	for (int i = 0; i < row; i++)
 	{
 		for (int j = 0; j < column; j++)
@@ -172,7 +181,6 @@ void CvebancoView::OnDraw(CDC* pDC)
 		pDC->SelectObject(oldPen);
 	}
 
-	// Pieces
 	for (int i = 0; i < row; i++)
 	{
 		for (int j = 0; j < column; j++)
@@ -185,11 +193,11 @@ void CvebancoView::OnDraw(CDC* pDC)
 				boardRect.top + i * cellSize,
 				boardRect.left + (j + 1) * cellSize,
 				boardRect.top + (i + 1) * cellSize);
-			cell.DeflateRect(max(4, cellSize / 5), max(4, cellSize / 5));
+			cell.DeflateRect(IntMax(4, cellSize / 5), IntMax(4, cellSize / 5));
 
 			if (arr[i][j] == 1)
 			{
-				CPen pen(PS_SOLID, max(2, cellSize / 8), kRed);
+				CPen pen(PS_SOLID, IntMax(2, cellSize / 8), kRed);
 				CPen* oldPen = pDC->SelectObject(&pen);
 				pDC->MoveTo(cell.left, cell.top);
 				pDC->LineTo(cell.right, cell.bottom);
@@ -199,7 +207,7 @@ void CvebancoView::OnDraw(CDC* pDC)
 			}
 			else
 			{
-				CPen pen(PS_SOLID, max(2, cellSize / 8), kGreen);
+				CPen pen(PS_SOLID, IntMax(2, cellSize / 8), kGreen);
 				CPen* oldPen = pDC->SelectObject(&pen);
 				CBrush* oldBrush = (CBrush*)pDC->SelectStockObject(NULL_BRUSH);
 				pDC->Ellipse(cell);
@@ -209,10 +217,9 @@ void CvebancoView::OnDraw(CDC* pDC)
 		}
 	}
 
-	// Side panel
 	int x = sideRect.left + 28;
 	int y = sideRect.top + 30;
-	int contentWidth = max(120, sideRect.Width() - 56);
+	int contentWidth = IntMax(120, sideRect.Width() - 56);
 
 	CFont titleFont;
 	titleFont.CreatePointFont(250, _T("Segoe UI Semibold"));
@@ -340,7 +347,7 @@ void CvebancoView::OnLButtonDown(UINT nFlags, CPoint point)
 
 	int panelX = sideRect.left + 28;
 	int panelY = sideRect.top + 30 + 48 + 62 + 138 + 34 + 68 + 88;
-	CRect newGameRect(panelX, panelY, panelX + max(120, sideRect.Width() - 56), panelY + 54);
+	CRect newGameRect(panelX, panelY, panelX + IntMax(120, sideRect.Width() - 56), panelY + 54);
 	if (newGameRect.PtInRect(point))
 	{
 		ResetGame();
