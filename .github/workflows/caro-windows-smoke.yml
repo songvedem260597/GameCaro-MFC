@@ -27,6 +27,66 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Inspect installed Windows C++ build tools
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+
+          Write-Host '=== PATH tools ==='
+          foreach ($tool in @('msbuild.exe','cl.exe','devenv.exe','cmake.exe','ninja.exe')) {
+            $cmd = Get-Command $tool -ErrorAction SilentlyContinue
+            if ($cmd) {
+              Write-Host "$tool => $($cmd.Source)"
+            } else {
+              Write-Host "$tool => NOT FOUND IN PATH"
+            }
+          }
+
+          Write-Host '=== Visual Studio Installer / vswhere ==='
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          if (Test-Path $vswhere) {
+            Write-Host "vswhere => $vswhere"
+            Write-Host '-- all installations --'
+            & $vswhere -all -products * -format json
+            Write-Host '-- installations with MSBuild --'
+            & $vswhere -all -products * -requires Microsoft.Component.MSBuild -property installationPath
+            Write-Host '-- installations with VC x86/x64 tools --'
+            & $vswhere -all -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+            Write-Host '-- installations with MFC --'
+            & $vswhere -all -products * -requires Microsoft.VisualStudio.Component.VC.MFC -property installationPath
+          } else {
+            Write-Host 'vswhere => NOT FOUND'
+          }
+
+          Write-Host '=== Common Visual Studio folders ==='
+          $roots = @(
+            (Join-Path $env:ProgramFiles 'Microsoft Visual Studio'),
+            (Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio')
+          )
+          foreach ($root in $roots) {
+            Write-Host "ROOT: $root"
+            if (Test-Path $root) {
+              Get-ChildItem $root -Directory -ErrorAction SilentlyContinue | Select-Object FullName
+              Write-Host 'MSBuild candidates:'
+              Get-ChildItem $root -Filter MSBuild.exe -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 10 FullName
+              Write-Host 'cl.exe candidates:'
+              Get-ChildItem $root -Filter cl.exe -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 10 FullName
+            } else {
+              Write-Host 'Folder does not exist.'
+            }
+          }
+
+          Write-Host '=== Windows SDK ==='
+          $kits10 = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10'
+          $kits81 = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\8.1'
+          Write-Host "Windows Kits 10 exists: $(Test-Path $kits10)"
+          Write-Host "Windows Kits 8.1 exists: $(Test-Path $kits81)"
+          if (Test-Path (Join-Path $kits10 'bin')) {
+            Get-ChildItem (Join-Path $kits10 'bin') -Directory -ErrorAction SilentlyContinue | Select-Object -Last 10 Name,FullName
+          }
+
+          Write-Host '=== Diagnostic complete ==='
+
       - name: Build updated Caro
         shell: powershell
         run: |
@@ -116,31 +176,17 @@ jobs:
             $bitmap.Dispose()
           }
 
-          $infoPath = Join-Path $artifactDir 'caro-ui-info.txt'
-          @(
-            "RUNNER_NAME=$env:RUNNER_NAME"
-            "COMPUTERNAME=$env:COMPUTERNAME"
-            "USERNAME=$env:USERNAME"
-            "PROCESS_ID=$($process.Id)"
-            "SCREEN_WIDTH=$($bounds.Width)"
-            "SCREEN_HEIGHT=$($bounds.Height)"
-            "CAPTURE_TIME_UTC=$([DateTime]::UtcNow.ToString('u'))"
-          ) | Set-Content -Path $infoPath -Encoding UTF8
-
           Write-Host "Saved screenshot: $pngPath"
           Start-Sleep -Seconds 4
           $process.Refresh()
           if (-not $process.HasExited) {
             Stop-Process -Id $process.Id -Force
           }
-          Write-Host 'PASS: captured desktop screenshot while updated Caro was running.'
 
       - name: Upload Caro UI artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: caro-ui-${{ github.run_number }}
-          path: |
-            artifacts/*.png
-            artifacts/*.txt
+          path: artifacts/*.png
           if-no-files-found: warn
