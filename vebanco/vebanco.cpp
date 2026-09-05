@@ -7,6 +7,12 @@
 #include "afxdialogex.h"
 #include "vebanco.h"
 #include "MainFrm.h"
+#include <DbgHelp.h>
+#include <Shlwapi.h>
+#include <stdio.h>
+
+#pragma comment(lib, "Dbghelp.lib")
+#pragma comment(lib, "Shlwapi.lib")
 
 #include "vebancoDoc.h"
 #include "vebancoView.h"
@@ -15,54 +21,101 @@
 #define new DEBUG_NEW
 #endif
 
+namespace
+{
+	CString GetDiagnosticDirectory()
+	{
+		TCHAR buffer[MAX_PATH * 4] = { 0 };
+		DWORD len = GetEnvironmentVariable(_T("CARO_DIAG_DIR"), buffer, _countof(buffer));
+		if (len > 0 && len < _countof(buffer))
+			return CString(buffer);
+
+		GetModuleFileName(NULL, buffer, _countof(buffer));
+		PathRemoveFileSpec(buffer);
+		return CString(buffer);
+	}
+
+	void EnsureDirectory(const CString& dir)
+	{
+		CreateDirectory(dir, NULL);
+	}
+
+	LONG WINAPI CaroUnhandledExceptionFilter(EXCEPTION_POINTERS* exceptionInfo)
+	{
+		CString dir = GetDiagnosticDirectory();
+		EnsureDirectory(dir);
+
+		CString dumpPath = dir + _T("\\caro-crash.dmp");
+		HANDLE dumpFile = CreateFile(dumpPath, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+		if (dumpFile != INVALID_HANDLE_VALUE)
+		{
+			MINIDUMP_EXCEPTION_INFORMATION dumpInfo;
+			dumpInfo.ThreadId = GetCurrentThreadId();
+			dumpInfo.ExceptionPointers = exceptionInfo;
+			dumpInfo.ClientPointers = FALSE;
+
+			MiniDumpWriteDump(
+				GetCurrentProcess(),
+				GetCurrentProcessId(),
+				dumpFile,
+				(MINIDUMP_TYPE)(MiniDumpWithDataSegs | MiniDumpWithHandleData | MiniDumpWithThreadInfo),
+				&dumpInfo,
+				NULL,
+				NULL);
+			CloseHandle(dumpFile);
+		}
+
+		CString crashPath = dir + _T("\\caro-crash.txt");
+		FILE* fp = NULL;
+		_tfopen_s(&fp, crashPath, _T("a+, ccs=UTF-8"));
+		if (fp)
+		{
+			SYSTEMTIME st;
+			GetLocalTime(&st);
+			DWORD code = exceptionInfo && exceptionInfo->ExceptionRecord
+				? exceptionInfo->ExceptionRecord->ExceptionCode
+				: 0;
+			PVOID address = exceptionInfo && exceptionInfo->ExceptionRecord
+				? exceptionInfo->ExceptionRecord->ExceptionAddress
+				: NULL;
+			_ftprintf(fp,
+				_T("%04d-%02d-%02d %02d:%02d:%02d crash code=0x%08X address=%p pid=%lu tid=%lu\n"),
+				st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond,
+				code, address, GetCurrentProcessId(), GetCurrentThreadId());
+			fclose(fp);
+		}
+
+		return EXCEPTION_EXECUTE_HANDLER;
+	}
+}
 
 // CvebancoApp
 
 BEGIN_MESSAGE_MAP(CvebancoApp, CWinApp)
 	ON_COMMAND(ID_APP_ABOUT, &CvebancoApp::OnAppAbout)
-	// Standard file based document commands
 	ON_COMMAND(ID_FILE_NEW, &CWinApp::OnFileNew)
 	ON_COMMAND(ID_FILE_OPEN, &CWinApp::OnFileOpen)
-	// Standard print setup command
 	ON_COMMAND(ID_FILE_PRINT_SETUP, &CWinApp::OnFilePrintSetup)
 END_MESSAGE_MAP()
 
-
-// CvebancoApp construction
-
 CvebancoApp::CvebancoApp()
 {
-	// TODO: replace application ID string below with unique ID string; recommended
-	// format for string is CompanyName.ProductName.SubProduct.VersionInformation
 	SetAppID(_T("vebanco.AppID.NoVersion"));
-
-	// TODO: add construction code here,
-	// Place all significant initialization in InitInstance
 }
-
-// The one and only CvebancoApp object
 
 CvebancoApp theApp;
 
-
-// CvebancoApp initialization
-
 BOOL CvebancoApp::InitInstance()
 {
-	// InitCommonControlsEx() is required on Windows XP if an application
-	// manifest specifies use of ComCtl32.dll version 6 or later to enable
-	// visual styles.  Otherwise, any window creation will fail.
+	SetUnhandledExceptionFilter(CaroUnhandledExceptionFilter);
+
 	INITCOMMONCONTROLSEX InitCtrls;
 	InitCtrls.dwSize = sizeof(InitCtrls);
-	// Set this to include all the common control classes you want to use
-	// in your application.
 	InitCtrls.dwICC = ICC_WIN95_CLASSES;
 	InitCommonControlsEx(&InitCtrls);
 
 	CWinApp::InitInstance();
 
-
-	// Initialize OLE libraries
 	if (!AfxOleInit())
 	{
 		AfxMessageBox(IDP_OLE_INIT_FAILED);
@@ -70,48 +123,26 @@ BOOL CvebancoApp::InitInstance()
 	}
 
 	AfxEnableControlContainer();
-
 	EnableTaskbarInteraction(FALSE);
-
-	// AfxInitRichEdit2() is required to use RichEdit control	
-	// AfxInitRichEdit2();
-
-	// Standard initialization
-	// If you are not using these features and wish to reduce the size
-	// of your final executable, you should remove from the following
-	// the specific initialization routines you do not need
-	// Change the registry key under which our settings are stored
-	// TODO: You should modify this string to be something appropriate
-	// such as the name of your company or organization
 	SetRegistryKey(_T("Local AppWizard-Generated Applications"));
-	LoadStdProfileSettings(4);  // Load standard INI file options (including MRU)
+	LoadStdProfileSettings(4);
 
-
-	// Register the application's document templates.  Document templates
-	//  serve as the connection between documents, frame windows and views
 	CSingleDocTemplate* pDocTemplate;
 	pDocTemplate = new CSingleDocTemplate(
 		IDR_MAINFRAME,
 		RUNTIME_CLASS(CvebancoDoc),
-		RUNTIME_CLASS(CMainFrame),       // main SDI frame window
+		RUNTIME_CLASS(CMainFrame),
 		RUNTIME_CLASS(CvebancoView));
 	if (!pDocTemplate)
 		return FALSE;
 	AddDocTemplate(pDocTemplate);
 
-
-	// Parse command line for standard shell commands, DDE, file open
 	CCommandLineInfo cmdInfo;
 	ParseCommandLine(cmdInfo);
 
-
-
-	// Dispatch commands specified on the command line.  Will return FALSE if
-	// app was launched with /RegServer, /Register, /Unregserver or /Unregister.
 	if (!ProcessShellCommand(cmdInfo))
 		return FALSE;
 
-	// The one and only window has been initialized, so show and update it
 	m_pMainWnd->ShowWindow(SW_SHOW);
 	m_pMainWnd->UpdateWindow();
 	return TRUE;
@@ -119,30 +150,18 @@ BOOL CvebancoApp::InitInstance()
 
 int CvebancoApp::ExitInstance()
 {
-	//TODO: handle additional resources you may have added
 	AfxOleTerm(FALSE);
-
 	return CWinApp::ExitInstance();
 }
-
-// CvebancoApp message handlers
-
-
-// CAboutDlg dialog used for App About
 
 class CAboutDlg : public CDialogEx
 {
 public:
 	CAboutDlg();
-
-// Dialog Data
 	enum { IDD = IDD_ABOUTBOX };
 
 protected:
-	virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV support
-
-// Implementation
-protected:
+	virtual void DoDataExchange(CDataExchange* pDX);
 	DECLARE_MESSAGE_MAP()
 };
 
@@ -158,14 +177,8 @@ void CAboutDlg::DoDataExchange(CDataExchange* pDX)
 BEGIN_MESSAGE_MAP(CAboutDlg, CDialogEx)
 END_MESSAGE_MAP()
 
-// App command to run the dialog
 void CvebancoApp::OnAppAbout()
 {
 	CAboutDlg aboutDlg;
 	aboutDlg.DoModal();
 }
-
-// CvebancoApp message handlers
-
-
-
