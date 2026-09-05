@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - ci/caro-windows-smoke-2
-  pull_request:
-    branches:
-      - master
   workflow_dispatch:
 
 permissions:
@@ -14,10 +11,18 @@ permissions:
 
 jobs:
   run-game:
-    runs-on: windows-latest
+    runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 10
 
     steps:
+      - name: Show runner identity
+        shell: pwsh
+        run: |
+          Write-Host "RUNNER_NAME=$env:RUNNER_NAME"
+          Write-Host "RUNNER_OS=$env:RUNNER_OS"
+          Write-Host "RUNNER_ARCH=$env:RUNNER_ARCH"
+          Write-Host "COMPUTERNAME=$env:COMPUTERNAME"
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -31,7 +36,7 @@ jobs:
           Get-Item $exe | Format-List FullName,Length,LastWriteTime
           Get-FileHash $exe -Algorithm SHA256 | Format-List
 
-      - name: Launch Caro smoke test
+      - name: Launch Caro smoke test on local PC
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -46,13 +51,14 @@ jobs:
             throw
           }
 
-          Write-Host "Started PID $($process.Id)"
-          Start-Sleep -Seconds 8
+          Write-Host "Started PID $($process.Id) on self-hosted runner $env:RUNNER_NAME"
+          Write-Host 'The game should be visible on the interactive Windows desktop for about 15 seconds.'
+          Start-Sleep -Seconds 15
           $process.Refresh()
 
           if ($process.HasExited) {
             throw "Caro exited too early. ExitCode=$($process.ExitCode)"
           }
 
-          Write-Host 'PASS: Caro stayed alive for 8 seconds on the GitHub-hosted Windows runner.'
+          Write-Host 'PASS: Caro stayed alive for 15 seconds on the self-hosted Windows runner.'
           Stop-Process -Id $process.Id -Force
